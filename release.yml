@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0 # É importante buscar o histórico completo para o git tag
+
+    - name: Set Go Version
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.24.4
+
+    - name: Set Git Identity
+      run: |
+        git config --global user.name "Raywall Malheiros"
+        git config --global user.email "raywall.malheiros@gmail.com"
+
+    - name: Get Previous Tag
+      id: previous_tag
+      run: |
+        previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "previous_tag=$previous_tag" >> $GITHUB_OUTPUT
+
+    - name: Increment Version and Create Tag
+      id: create_tag
+      run: |
+        # Aqui você pode implementar sua lógica de incremento de versão.
+        # Para um exemplo simples, vamos apenas adicionar um patch (o terceiro número).
+        previous_version="${{ steps.previous_tag.outputs.previous_tag }}"
+        IFS='.' read -r major minor patch <<< "$previous_version"
+        next_patch=$((patch + 1))
+        new_tag="${major}.${minor}.${next_patch}"
+        echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+        git tag "$new_tag"
+        git push --tags
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create Release with GoReleaser
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: 'latest'
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

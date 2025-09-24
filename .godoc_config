@@ -1,0 +1,23 @@
+{
+	"PkgHandler": {
+		"Pattern": "/go-libs-config",
+		"StripPrefix": "/go-libs-config",
+		"Include": [
+			"/src/github.com/raywall/go-libs-config",
+			"/src/github.com/raywall/go-libs-config/*.go",
+			"/src/github.com/raywall/go-libs-config/builder/*.go",
+			"/src/github.com/raywall/go-libs-config/examples/*.go",
+		],
+		"Exclude": [
+			"/src/github.com/raywall/go-libs-config/examples/config/Makefile",
+		],
+		"IgnoredSuffixes": [
+			"iface"
+		]
+	},
+	"Github": {
+		"Tag": "main",
+		"Repo": "/raywall/go-libs-config",
+		"UseGithub": true
+	}
+}

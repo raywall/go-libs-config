@@ -1,0 +1,37 @@
+# Binaries for programs
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Compiled Go packages (object files)
+*.a
+*.o
+
+# Test results and coverage reports
+*.test
+*.out
+cover.out
+
+# Go module cache
+/pkg/mod/
+
+# Dependency vendor directory
+/vendor/
+
+# Local build directory (if used)
+/bin/
+/build/
+
+# Editor/IDE specific files (examples)
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.DS_Store
+Thumbs.db
+
+# Environment variables file
+.env
+
+main.tf

@@ -274,124 +274,69 @@ func (b *ConfigBuilder) getParametersByPath(ctx context.Context, path string) ([
 	return allParams, nil
 }
 
-// sortTypesByDependency reordena o schema em um map[string]interface{} in-place.
-// AVISO: Esta função NÃO PODE garantir a ordem das chaves no JSON final.
-func sortTypesByDependency(schema *map[string]interface{}) error {
-	// 1. Dereferencia o ponteiro para trabalhar com o mapa.
-	s := *schema
-
-	// 2. Extrai os dados originais do mapa.
-	rawTypesVal, ok := s["types"]
+// sortTypesByDependencies reordena os tipos com base nas dependências
+func sortTypesByDependencies(schema map[string]interface{}) error {
+	types, ok := schema["types"].(interface{})
 	if !ok {
-		return fmt.Errorf("o campo 'types' não foi encontrado")
-	}
-	rawTypes, ok := rawTypesVal.([]interface{})
-	if !ok {
-		return fmt.Errorf("o campo 'types' não é um slice")
+		return fmt.Errorf("'types' não encontrado ou não é uma lista")
 	}
 
-	query, ok := s["query"]
-	if !ok {
-		return fmt.Errorf("o campo 'query' não foi encontrado")
-	}
+	// Mapeia os tipos por nome e suas dependências
+	typeMap := make(map[string]map[string]interface{})
+	dependencyMap := make(map[string][]string)
 
-	// 3. Lógica de ordenação topológica completa (para o conteúdo de 'types').
-	typeDefinitions := make(map[string]interface{})
-	typeNames := make(map[string]bool)
+	for _, t := range types {
+		typeObj := t.(map[string]interface{})
+		name := typeObj["name"].(string)
+		typeMap[name] = typeObj
 
-	for _, t := range rawTypes {
-		typeMap, ok := t.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		name, ok := typeMap["name"].(string)
-		if !ok {
-			continue
-		}
-		typeDefinitions[name] = t
-		typeNames[name] = true
-	}
-
-	adjacencia := make(map[string][]string)
-	grauEntrada := make(map[string]int)
-
-	for name := range typeNames {
-		adjacencia[name] = []string{}
-		grauEntrada[name] = 0
-	}
-
-	for name := range typeNames {
-		typeDef := typeDefinitions[name].(map[string]interface{})
-		fields, ok := typeDef["fields"].([]interface{})
-		if !ok {
-			continue
-		}
-
-		for _, f := range fields {
-			field, ok := f.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			if dependencyName, ok := field["ofType"].(string); ok {
-				if _, isCustomType := typeNames[dependencyName]; isCustomType {
-					adjacencia[dependencyName] = append(adjacencia[dependencyName], name)
-					grauEntrada[name]++
-				}
-			}
-
-			if args, ok := field["args"].([]interface{}); ok {
-				for _, a := range args {
-					arg, ok := a.(map[string]interface{})
-					if !ok {
-						continue
-					}
-					if dependencyName, ok := arg["ofType"].(string); ok {
-						if _, isCustomType := typeNames[dependencyName]; isCustomType {
-							adjacencia[dependencyName] = append(adjacencia[dependencyName], name)
-							grauEntrada[name]++
-						}
-					}
+		// Captura dependências (ofType) nos campos
+		fields, ok := typeObj["fields"].([]interface{})
+		if ok {
+			for _, f := range fields {
+				field := f.(map[string]interface{})
+				if ofType, exists := field["ofType"].(string); exists {
+					dependencyMap[name] = append(dependencyMap[name], ofType)
 				}
 			}
 		}
 	}
 
-	fila := []string{}
-	for name, grau := range grauEntrada {
-		if grau == 0 {
-			fila = append(fila, name)
-		}
-	}
+	// Ordenação topológica
+	var sortedTypes []map[string]interface{}
+	visited := make(map[string]bool)
+	inStack := make(map[string]bool)
 
-	sortedTypes := make([]interface{}, 0, len(rawTypes))
-	for len(fila) > 0 {
-		currentName := fila[0]
-		fila = fila[1:]
-		sortedTypes = append(sortedTypes, typeDefinitions[currentName])
-		for _, neighbor := range adjacencia[currentName] {
-			grauEntrada[neighbor]--
-			if grauEntrada[neighbor] == 0 {
-				fila = append(fila, neighbor)
+	var visit func(string) error
+	visit = func(name string) error {
+		if inStack[name] {
+			return fmt.Errorf("ciclo detectado com o tipo: %s", name)
+		}
+		if visited[name] {
+			return nil
+		}
+		inStack[name] = true
+		for _, dep := range dependencyMap[name] {
+			if _, exists := typeMap[dep]; exists {
+				if err := visit(dep); err != nil {
+					return err
+				}
 			}
 		}
+		inStack[name] = false
+		visited[name] = true
+		sortedTypes = append(sortedTypes, typeMap[name])
+		return nil
 	}
 
-	if len(sortedTypes) != len(rawTypes) {
-		return fmt.Errorf("dependência circular detectada no schema de tipos")
+	for name := range typeMap {
+		if err != visit(name); err != nil {
+			return err
+		}
 	}
 
-	// 4. Limpa o mapa original e o reconstrói.
-	// Primeiro, remove todas as chaves existentes.
-	for key := range s {
-		delete(s, key)
-	}
-
-	// Agora, insere as chaves novamente.
-	// A ORDEM DESTA INSERÇÃO SERÁ IGNORADA PELO SERIALIZADOR JSON.
-	s["types"] = sortedTypes
-	s["query"] = query
-
+	// Substitui os tipos ordenados do schema
+	schema["types"] = sortedTypes
 	return nil
 }
 
